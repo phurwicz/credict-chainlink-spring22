@@ -2,6 +2,57 @@
 pragma solidity >=0.7.0;
 
 contract PredictionRecorder {
+    /**
+     * Forecast the value of any address-identifiable oracle to show your expertise.
+     * This contract will demonstrate and protect the originality of your predictions.
+     * It does so through address-based watermarks and RSA encryption.
+     *
+     * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+     *
+     * Basic interaction guide:
+     * (off-chain)
+     * - have a prediction value for the oracle at some future time (Unix epoch)
+     * - generate watermark prefix that does not contain 0
+     *   - the watermark is an ordered subset of the digits of your address in base 10
+     *   - you are free to choose the length of the watermark for each prediction
+     * - generate RSA encryption keys (n, e, d) for your prediction
+     * - compute RSA.encrypt(int("<watermark>0<prediction_value>")) with the "e" key
+     * (this contract)
+     * - submit your encrypted prediction by transacting with makePrediction()
+     * - submit a few more using the same RSA keys
+     * - you can also change keys, but remember which keys are for which predictions
+     * - decrypt your predictions by transacting with decryptPrediction()
+     *   -  decryption will expose your keys, be sure to change them afterwards
+     * (off-chain)
+     * - others can query your predictions through viewPrediction() or EtherScan
+     * - others can verify the originality statistics of your predictions through analyzePredictionRecord()
+     *   - if a someone copies your predictions, their watermark validity will be poor
+     *   - of course, you should replace RSA keys on time and use 6 digits or more on the watermark
+     *   - if you don't want to get copied, do not decrypt a prediction if its target time has yet to come
+     * - you gain credibility by making good predictions
+     *
+     * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+     *
+     * Encryption example:
+     * I want to predict a value of 420 for some oracle at timestamp 1652201024.
+     * My address is 1520779317728643809679224833904517355724024437910
+     *                 | |  |    |   |    |    |
+     *                 2 7  3    8   8    9    3 is a valid watermark.
+     * My unencrypted prediction is 27388930420. The first 0 is a separator.
+     * (n = 1071754013065097, e = 53419426187, d = 20063) is a valid set of RSA keys.
+     * My encrypted prediction is (27388930420 ** 53419426187) % 1071754013065097, which is 538266748668477.
+     * I predict through makePrediction(1652201024, 538266748668477, "Me", "My comment").
+     * Let's say my transaction happened in a block with timestamp at 1652000000.
+     * I can decrypt through decryptPrediction(20063, 1071754013065097, 1652000001) or such.
+     *
+     * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+     *
+     * Python API in the works: https://pypi.org/project/credict/
+     * It uses web3py to interact with Credict contracts.
+     * It can help you keep track of local RSA keys and determine encryption batches.
+     *
+     * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+     */
 
     struct Prediction {
         address targetOracle;
@@ -182,7 +233,7 @@ contract PredictionRecorder {
     function extractWatermark(
         uint watermarkedValue,
         uint[] memory addressDigits
-    ) public pure returns (bool, uint, uint) {
+    ) public pure returns (bool, uint, uint, uint) {
         uint[] memory valueDigits = uintToDigits(watermarkedValue);
 
         /* Initialize return values and processing pointer */
@@ -191,14 +242,14 @@ contract PredictionRecorder {
         uint watermarkValue = 0;
         uint watermarkPointer = 0;
 
-        for (uint j = 0; j < valueDigits.length; j++) {
+        for (uint i = 0; i < valueDigits.length; i++) {
             /* Watermark normally terminates upon the first 0 encountered */
-            if (valueDigits[j] == 0) {
+            if (valueDigits[i] == 0) {
                 break;
             }
 
             /* The watermark must be a "substring" of the integer form of the prediction sender's address */
-            while (addressDigits[watermarkPointer] != valueDigits[j]) {
+            while (addressDigits[watermarkPointer] != valueDigits[i]) {
                 watermarkPointer++;
                 /* If address digits are exhausted, then substring match fails */
                 if (watermarkPointer >= addressDigits.length) {
@@ -212,10 +263,19 @@ contract PredictionRecorder {
 
             /* Watermark check continues: shift existing digits to the left and add current digit */
             watermarkValue *= 10;
-            watermarkValue += valueDigits[j];
+            watermarkValue += valueDigits[i];
             watermarkLength++;
         }
-        return (watermarkFlag, watermarkLength, watermarkValue);
+
+        uint unwatermarkedValue = 0;
+        if (watermarkFlag) {
+            for (uint i = watermarkLength + 1; i < valueDigits.length; i++) {
+                unwatermarkedValue *= 10;
+                unwatermarkedValue += valueDigits[i];
+            }
+        }
+
+        return (watermarkFlag, watermarkLength, watermarkValue, unwatermarkedValue);
     }
 
     /**
@@ -283,7 +343,8 @@ contract PredictionRecorder {
             (
                 bool watermarkFlag,
                 uint watermarkLength,
-                uint watermarkValue
+                uint watermarkValue,
+                /* uint unwatermarkedValue */
             ) = extractWatermark(
                 uint(storedPredictions[i].predictedValue >= 0 ? storedPredictions[i].predictedValue : -storedPredictions[i].predictedValue),
                 addressDigits
@@ -302,15 +363,15 @@ contract PredictionRecorder {
         quickSort(validWatermarks, int(0), int(intermediateStats[1]));
 
         return (
-            /* # decrypted predictions (no suggested value) */
+            /* # decrypted predictions (length of track record, the longer the merrier) */
             intermediateStats[0],
             /* # valid watermarks per 1000 predictions (as close to 1000 as possible) */
             (1000 * intermediateStats[1] / intermediateStats[0]),
             /* # distinct valid watermarks per 1000 predictions (as close to 1000 as possible) */
             (1000 * countDistinctSortedUints(validWatermarks, intermediateStats[1]) / intermediateStats[0]),
-            /* average length of valid watermarks per prediction (8-15; too low is bad for security, too high can be costly) */
+            /* average length of valid watermarks per prediction (6-10; too low is bad for security, too high can be costly) */
             intermediateStats[2] / intermediateStats[0],
-            /* average predictions per decryption call (10-1000; too low is bad for trust, too high can be bad for security) */
+            /* average predictions per decryption call (4-100; too low is bad for trust, too high can be bad for security) */
             intermediateStats[0] / numDecryptionBatches[_predictionAddress]
         );
     }
