@@ -1,6 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.7.0;
 
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+struct Prediction {
+    address targetOracle;
+    uint targetTime;
+    uint creationTime;
+    int predictedValue;
+    bool isDecrypted;
+    address predictionAddress;
+    string predictionAuthor;
+    string predictionComment;
+}
+
 contract PredictionRecorder {
     /**
      * Forecast the value of any address-identifiable oracle to show your expertise.
@@ -54,16 +67,7 @@ contract PredictionRecorder {
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
      */
 
-    struct Prediction {
-        address targetOracle;
-        uint targetTime;
-        uint creationTime;
-        int predictedValue;
-        bool isDecrypted;
-        address predictionAddress;
-        string predictionAuthor;
-        string predictionComment;
-    }
+
 
     address private oracleAddress;
     mapping (address => Prediction[]) private predictions;
@@ -72,6 +76,13 @@ contract PredictionRecorder {
 
     constructor(address _oracleAddress) {
         oracleAddress = _oracleAddress;
+    }
+
+    /**
+     * View the address of the oracle for sanity check.
+     */
+    function viewOracle() public view returns (address) {
+        return oracleAddress;
     }
 
     /**
@@ -98,60 +109,6 @@ contract PredictionRecorder {
             predictionAuthor: _predictionAuthor,
             predictionComment: _predictionComment
         }));
-    }
-
-    function test() public pure {
-        require(logarithmFloor(4, 2) == 2);
-        require(logarithmFloor(99, 10) == 1);
-        require(logarithmFloor(100, 10) == 2);
-        require(logarithmFloor(1000000, 100) == 3);
-        require(powerWithModulos(3, 1, 1, 7) == 3);
-        require(powerWithModulos(3, 2, 3, 7) == 2);
-        require(powerWithModulos(3, 3, 3, 7) == 6);
-        require(powerWithModulos(3, 4, 3, 7) == 4);
-        require(uintToDigits(1234)[3] == 4);
-    }
-
-    /**
-     * Simple integer logarithm, taking the floor.
-     */
-    function logarithmFloor(uint number, uint base) public pure returns (uint) {
-        require(base >= 2, "Base must be at least 2.");
-        uint logValue = 0;
-        while (number >= base) {
-            number /= base;
-            logValue++;
-        }
-        return logValue;
-    }
-
-    /**
-     * Raise a number to some power while taking modulos.
-     */
-    function powerWithModulos(uint base, uint power, uint log2PowerUpper, uint modulos) public pure returns (uint) {
-        require(2 ** log2PowerUpper >= power, "Invalid argument value log2PowerUpper");
-        /* cache stores base, base**2, base**4, base**8, ... all with % modulos */
-        uint[] memory cache = new uint[](log2PowerUpper);
-        uint twoToK = 1;
-        uint k = 0;
-        base = base % modulos;
-        uint burner = base;
-        while (power >= twoToK) {
-            cache[k] = burner;
-            twoToK *= 2;
-            k += 1;
-            burner = (burner * burner) % modulos;
-        }
-        uint result = 1;
-        while (power > 0) {
-            while (power < twoToK) {
-                twoToK /= 2;
-                k -= 1;
-            }
-            result = (result * cache[k]) % modulos;
-            power -= twoToK;
-        }
-        return result;
     }
 
     /**
@@ -200,35 +157,8 @@ contract PredictionRecorder {
     }
 
     /**
-     * View the address of the oracle for sanity check.
-     */
-    function viewOracle() public view returns (address) {
-        return oracleAddress;
-    }
-
-    /**
-     * Break a number into digits from left to right.
-     */
-    function uintToDigits(uint number) public pure returns (uint[] memory) {
-        uint numDigits = 1;
-        uint burnerVariable = number;
-        while (burnerVariable >= 10) {
-            numDigits += 1;
-            burnerVariable /= 10;
-        }
-
-        uint[] memory digits = new uint[](numDigits);
-        burnerVariable = number;
-        for (uint i = 0; i < numDigits; i++) {
-            digits[numDigits - 1 - i] = burnerVariable % 10;
-            burnerVariable /= 10;
-        }
-        return digits;
-    }
-
-    /**
-     * Compare a watermarked value with an address.
-     * Return a success flag, a length measure, and the watermark value.
+     * Compare a watermarked value with an address, then parse it.
+     * Return a success flag, a length measure, the watermark value, and the actual predicted value.
      */
     function extractWatermark(
         uint watermarkedValue,
@@ -279,45 +209,37 @@ contract PredictionRecorder {
     }
 
     /**
-     * Turn an address into uint form.
+     * View the prediction records made from an address that fall into a window of target time.
      */
-    function addressToUint(address _address) public pure returns (uint) {
-        return uint(uint160(_address));
-    }
+    function viewPredictionByWindow(
+        address _predictionAddress,
+        uint _targetTimeStart,
+        uint _targetTimeEnd
+    ) public view returns (Prediction[] memory) {
+        Prediction[] memory storedPredictions = viewPrediction(_predictionAddress);
 
-    /**
-     * Count the number of distinct uints in a (portion of) a sorted array.
-     */
-    function countDistinctSortedUints(uint[] memory arr, uint maxIdx) public pure returns (uint) {
-        if (maxIdx <= 1) {return maxIdx;}
-        uint numDistincts = 1;
-        for (uint i = 1; i < maxIdx; i++) {
-            if (arr[i-1] == arr[i]) {numDistincts++;}
-        }
-        return numDistincts;
-    }
-
-    function quickSort(uint[] memory arr, int left, int right) internal pure {
-        /* Initialize pointers */
-        int i = left;
-        int j = right;
-        if (i==j) {return;}
-
-        /* Partition: below pivot -> left; above pivot -> right */
-        uint pivot = arr[uint((left + right) / 2)];
-        while (i <= j) {
-            while (arr[uint(i)] < pivot) {i++;}
-            while (pivot < arr[uint(j)]) {j--;}
-            if (i <= j) {
-                (arr[uint(i)], arr[uint(j)]) = (arr[uint(j)], arr[uint(i)]);
-                i++;
-                j--;
+        /* Find the number of predictions in the window and roughly locate them */
+        uint numInWindow = 0;
+        uint firstIdxInWindow = storedPredictions.length + 1;
+        uint lastIdxInWindow = 0;
+        for (uint i = 0; i < storedPredictions.length; i++) {
+            if (_targetTimeStart <= storedPredictions[i].targetTime && storedPredictions[i].targetTime <= _targetTimeEnd) {
+                numInWindow++;
+                lastIdxInWindow = i;
+                if (firstIdxInWindow > storedPredictions.length) {firstIdxInWindow = i;}
             }
         }
 
-        /* Divide and conquer */
-        if (left < j) {quickSort(arr, left, j);}
-        if (i < right) {quickSort(arr, i, right);}
+        /* Collect predictions that are in the window */
+        Prediction[] memory inWindowPredictions = new Prediction[](numInWindow);
+        numInWindow = 0;
+        for (uint i = firstIdxInWindow; i < lastIdxInWindow + 1; i++) {
+            if (_targetTimeStart <= storedPredictions[i].targetTime && storedPredictions[i].targetTime <= _targetTimeEnd) {
+                inWindowPredictions[numInWindow] = storedPredictions[i];
+                numInWindow++;
+            }
+        }
+        return inWindowPredictions;
     }
 
     /**
@@ -327,7 +249,7 @@ contract PredictionRecorder {
     function analyzePredictionRecord(address _predictionAddress) public view returns (uint, uint, uint, uint, uint) {
 
         /* We use the integer form of the sender's address to produce (off-contract) and verify (in-contract) watermarks */
-        Prediction[] memory storedPredictions = predictions[_predictionAddress];
+        Prediction[] memory storedPredictions = viewPrediction(_predictionAddress);
         uint[] memory addressDigits = uintToDigits(addressToUint(_predictionAddress));
 
         /* For fewer local variables. [numDecryptedPredictions, numValidWatermarks, totalValidWatermarkLength] */
@@ -339,13 +261,13 @@ contract PredictionRecorder {
             /* If not yet decrypted, stop */
             if (!storedPredictions[i].isDecrypted) {break;}
 
-            /* Take the predicted value without sign */
             (
                 bool watermarkFlag,
                 uint watermarkLength,
                 uint watermarkValue,
                 /* uint unwatermarkedValue */
             ) = extractWatermark(
+                /* Take the predicted value without sign */
                 uint(storedPredictions[i].predictedValue >= 0 ? storedPredictions[i].predictedValue : -storedPredictions[i].predictedValue),
                 addressDigits
             );
@@ -375,5 +297,307 @@ contract PredictionRecorder {
             intermediateStats[0] / numDecryptionBatches[_predictionAddress]
         );
     }
+
+
+
+}
+
+contract InvitationalBet {
+
+    PredictionRecorder private recorder;
+    AggregatorV3Interface private dataFeed;
+    address private recorderAddress;
+    address[] private participants;
+
+    uint private targetTime;
+    uint private payOpenTime;
+    uint private minWatermarkLength;
+    uint private roundTime;
+    uint80 private roundId;
+    int private trueValue;
+    bool private isComplete;
+
+    mapping (address => uint) private isInvited;
+    mapping (address => uint) private betValues;
+
+    constructor(
+        address _recorderAddress,
+        address[] memory _participants,
+        uint _targetTime,
+        uint _payOpenTime,
+        uint _minWatermarkLength
+    ) {
+        require(block.timestamp < targetTime, "Cannot target the past.");
+        require(payOpenTime >= targetTime + 72 * 3600, "Give at least 72 hours for post-window decryption.");
+
+        recorder = PredictionRecorder(_recorderAddress);
+        dataFeed = AggregatorV3Interface(recorder.viewOracle());
+        recorderAddress = _recorderAddress;
+        targetTime = _targetTime;
+        payOpenTime = _payOpenTime;
+        minWatermarkLength = _minWatermarkLength;
+
+        for (uint i = 1; i < _participants.length; i++) {
+            participants.push(_participants[i]);
+            isInvited[_participants[i]] = 1;
+            betValues[_participants[i]] = 0;
+        }
+
+        /* These will be unknown during construction */
+        roundTime = 0;
+        roundId = 0;
+        trueValue = 0;
+    }
+
+    modifier onlyInvited() {
+        require(isInvited[msg.sender] == 1, "You are not invited.");
+        _;
+    }
+
+    modifier beforeTargetTime() {
+        require(block.timestamp <= targetTime, "Target time has passed.");
+        _;
+    }
+
+    modifier beforePayOpen() {
+        require(block.timestamp < payOpenTime, "Pay is already open.");
+        _;
+    }
+
+    modifier afterPayOpen() {
+        require(payOpenTime <= block.timestamp, "Must wait till pay opens.");
+        _;
+    }
+
+    modifier beforeComplete() {
+        require(!isComplete, "The bet is complete.");
+        _;
+    }
+
+    /**
+     * Basic information for participants to view.
+     */
+    function viewInfo() public view returns (address, address, uint, uint, uint, uint80, uint, int) {
+        return (
+            recorderAddress,
+            recorder.viewOracle(),
+            targetTime,
+            payOpenTime,
+            minWatermarkLength,
+            roundId,
+            roundTime,
+            trueValue
+        );
+    }
+
+    function addValue() external payable onlyInvited beforeTargetTime {
+        betValues[msg.sender] += msg.value;
+    }
+
+    /**
+     * Register a round for oracle lookup that should be the latest one before the target time.
+     */
+    function registerRound(uint80 _roundId) public beforePayOpen returns (bool) {
+        (
+            /* uint80 id */,
+            int oracleValue,
+            /* uint startedAt */,
+            uint timeStamp,
+            /* uint80 answeredInRound */
+        ) = dataFeed.getRoundData(_roundId);
+        if (timeStamp > roundTime && timeStamp <= targetTime) {
+            roundId = _roundId;
+            roundTime = timeStamp;
+            trueValue = oracleValue;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * An example of calculating payoff coefficients.
+     * Staircase exponential decay, bounded below by 1.
+     */
+    function payCoefficient(int _predValue, int _trueValue) public pure returns (uint) {
+        uint diff = uint(_predValue >= _trueValue ? _predValue - _trueValue : _trueValue - _predValue);
+        uint coeff = 2 ** 20;
+        for (uint i = 0; i < (diff / 10); i++) {
+            coeff /= 2;
+        }
+        return coeff + 1;
+    }
+
+    function triggerPay() external payable afterPayOpen beforeComplete {
+        uint[] memory payCoefficients = new uint[](participants.length);
+        uint totalCoefficient = 0;
+
+        /* Calculate payoff coefficients proportional to bet value */
+        for (uint i = 0; i < participants.length; i++) {
+            /* no prediction made: factor = 1 */
+            Prediction[] memory predictions = recorder.viewPredictionByWindow(
+                participants[i],
+                targetTime,
+                targetTime
+            );
+            if (predictions.length < 1) {
+                payCoefficients[i] = betValues[participants[i]];
+                totalCoefficient += betValues[participants[i]];
+                continue;
+            }
+
+            /* Extract the last predicted value for the target time*/
+            Prediction memory lastPrediction = predictions[predictions.length-1];
+            uint[] memory addressDigits = uintToDigits(addressToUint(participants[i]));
+            int sign = lastPrediction.predictedValue >= 0 ? int(1) : int(-1);
+            (
+                bool watermarkFlag,
+                uint watermarkLength,
+                /* uint watermarkValue */,
+                uint unwatermarkedValue
+            ) = recorder.extractWatermark(
+                uint(sign * lastPrediction.predictedValue),
+                addressDigits
+            );
+
+            /* watermark is unsatisfactory: factor = 1 */
+            if (!watermarkFlag || watermarkLength < minWatermarkLength) {
+                payCoefficients[i] = betValues[participants[i]];
+                totalCoefficient += betValues[participants[i]];
+                continue;
+            }
+
+            /* normal scenario: factor is based on the predicted value */
+            int predValue = sign * int(unwatermarkedValue);
+            uint factor = payCoefficient(predValue, trueValue);
+            payCoefficients[i] = factor * betValues[participants[i]];
+            totalCoefficient += factor * betValues[participants[i]];
+        }
+
+        /* Proceed with payment */
+        uint totalAmount = address(this).balance;
+        uint cumulCoefficient = 0;
+        uint cumulPayment = 0;
+        uint nextCumulPayment = 0;
+
+        for (uint i = 0; i < participants.length - 1; i++) {
+            cumulCoefficient += payCoefficients[i];
+            nextCumulPayment = cumulCoefficient * totalAmount / totalCoefficient;
+            uint paymentAmount = nextCumulPayment - cumulPayment;
+            payable(participants[i]).transfer(paymentAmount);
+            cumulPayment = nextCumulPayment;
+        }
+        /* For the last participant, avoid rounding error */
+        payable(participants[participants.length-1]).transfer(address(this).balance);
+        isComplete = true;
+    }
+}
+
+/* * * * * * * * * * Helper functions go below this line * * * * * * * * * */
+
+/**
+ * Quicksort an array in-place.
+ */
+function quickSort(uint[] memory arr, int left, int right) pure {
+    /* Initialize pointers */
+    int i = left;
+    int j = right;
+    if (i==j) {return;}
+
+    /* Partition: below pivot -> left; above pivot -> right */
+    uint pivot = arr[uint((left + right) / 2)];
+    while (i <= j) {
+        while (arr[uint(i)] < pivot) {i++;}
+        while (pivot < arr[uint(j)]) {j--;}
+        if (i <= j) {
+            (arr[uint(i)], arr[uint(j)]) = (arr[uint(j)], arr[uint(i)]);
+            i++;
+            j--;
+        }
+    }
+
+    /* Divide and conquer */
+    if (left < j) {quickSort(arr, left, j);}
+    if (i < right) {quickSort(arr, i, right);}
+}
+
+/**
+ * Simple integer logarithm, taking the floor.
+ */
+function logarithmFloor(uint number, uint base) pure returns (uint) {
+    require(base >= 2, "Logarithm base must be at least 2.");
+    uint logValue = 0;
+    while (number >= base) {
+        number /= base;
+        logValue++;
+    }
+    return logValue;
+}
+
+/**
+ * Raise a number to some power while taking modulos.
+ */
+function powerWithModulos(uint base, uint power, uint log2PowerUpper, uint modulos) pure returns (uint) {
+    require(2 ** log2PowerUpper >= power, "Invalid argument value log2PowerUpper");
+    /* cache stores base, base**2, base**4, base**8, ... all with % modulos */
+    uint[] memory cache = new uint[](log2PowerUpper);
+    uint twoToK = 1;
+    uint k = 0;
+    base = base % modulos;
+    uint burner = base;
+    while (power >= twoToK) {
+        cache[k] = burner;
+        twoToK *= 2;
+        k += 1;
+        burner = (burner * burner) % modulos;
+    }
+    uint result = 1;
+    while (power > 0) {
+        while (power < twoToK) {
+            twoToK /= 2;
+            k -= 1;
+        }
+        result = (result * cache[k]) % modulos;
+        power -= twoToK;
+    }
+    return result;
+}
+
+/**
+ * Break a number into digits from left to right.
+ */
+function uintToDigits(uint number) pure returns (uint[] memory) {
+    uint numDigits = 1;
+    uint burnerVariable = number;
+    while (burnerVariable >= 10) {
+        numDigits += 1;
+        burnerVariable /= 10;
+    }
+
+    uint[] memory digits = new uint[](numDigits);
+    burnerVariable = number;
+    for (uint i = 0; i < numDigits; i++) {
+        digits[numDigits - 1 - i] = burnerVariable % 10;
+        burnerVariable /= 10;
+    }
+    return digits;
+}
+
+/**
+ * Turn an address into uint form.
+ */
+function addressToUint(address _address) pure returns (uint) {
+    return uint(uint160(_address));
+}
+
+/**
+ * Count the number of distinct uints in a (portion of) a sorted array.
+ */
+function countDistinctSortedUints(uint[] memory arr, uint maxIdx) pure returns (uint) {
+    if (maxIdx <= 1) {return maxIdx;}
+    uint numDistincts = 1;
+    for (uint i = 1; i < maxIdx; i++) {
+        if (arr[i-1] == arr[i]) {numDistincts++;}
+    }
+    return numDistincts;
 }
 
