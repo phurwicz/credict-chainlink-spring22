@@ -418,7 +418,7 @@ contract InvitationalBet {
      * An example of calculating payoff coefficients.
      * Staircase exponential decay, bounded below by 1.
      */
-    function payCoefficient(int _predValue, int _trueValue) public pure returns (uint) {
+    function payCoefficientFormula(int _predValue, int _trueValue) public pure returns (uint) {
         uint diff = uint(_predValue >= _trueValue ? _predValue - _trueValue : _trueValue - _predValue);
         uint coeff = 2 ** 20;
         for (uint i = 0; i < (diff / 10); i++) {
@@ -427,9 +427,8 @@ contract InvitationalBet {
         return coeff + 1;
     }
 
-    function triggerPay() external payable afterPayOpen beforeComplete {
+    function computePayCoefficients() public view afterPayOpen returns (uint[] memory) {
         uint[] memory payCoefficients = new uint[](participants.length);
-        uint totalCoefficient = 0;
 
         /* Calculate payoff coefficients proportional to bet value */
         for (uint i = 0; i < participants.length; i++) {
@@ -441,7 +440,6 @@ contract InvitationalBet {
             );
             if (predictions.length < 1) {
                 payCoefficients[i] = betValues[participants[i]];
-                totalCoefficient += betValues[participants[i]];
                 continue;
             }
 
@@ -462,15 +460,23 @@ contract InvitationalBet {
             /* watermark is unsatisfactory: factor = 1 */
             if (!watermarkFlag || watermarkLength < minWatermarkLength) {
                 payCoefficients[i] = betValues[participants[i]];
-                totalCoefficient += betValues[participants[i]];
                 continue;
             }
 
             /* normal scenario: factor is based on the predicted value */
             int predValue = sign * int(unwatermarkedValue);
-            uint factor = payCoefficient(predValue, trueValue);
+            uint factor = payCoefficientFormula(predValue, trueValue);
             payCoefficients[i] = factor * betValues[participants[i]];
-            totalCoefficient += factor * betValues[participants[i]];
+        }
+        return payCoefficients;
+    }
+
+    function triggerPay() external payable afterPayOpen beforeComplete {
+        uint[] memory payCoefficients = computePayCoefficients();
+        uint totalCoefficient = 0;
+
+        for (uint i = 0; i < participants.length; i++) {
+            totalCoefficient += payCoefficients[i];
         }
 
         /* Proceed with payment */
