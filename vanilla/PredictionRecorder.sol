@@ -67,8 +67,6 @@ contract PredictionRecorder {
      * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
      */
 
-
-
     address private oracleAddress;
     mapping (address => Prediction[]) private predictions;
     mapping (address => uint) private decryptIndices;
@@ -209,24 +207,32 @@ contract PredictionRecorder {
     }
 
     /**
-     * View the prediction records made from an address that fall into a window of target time.
+     * View the prediction records made from an address that fall into a window of target time and creation time.
      */
     function viewPredictionByWindow(
         address _predictionAddress,
         uint _targetTimeStart,
-        uint _targetTimeEnd
+        uint _targetTimeEnd,
+        uint _creationTimeStart,
+        uint _creationTimeEnd
     ) public view returns (Prediction[] memory) {
         Prediction[] memory storedPredictions = viewPrediction(_predictionAddress);
 
-        /* Find the number of predictions in the window and roughly locate them */
+        /* Find the number of predictions in the window and roughly locate them to save some loop runs */
         uint numInWindow = 0;
         uint firstIdxInWindow = storedPredictions.length + 1;
         uint lastIdxInWindow = 0;
         for (uint i = 0; i < storedPredictions.length; i++) {
-            if (_targetTimeStart <= storedPredictions[i].targetTime && storedPredictions[i].targetTime <= _targetTimeEnd) {
-                numInWindow++;
-                lastIdxInWindow = i;
+            bool windowFlag = (
+                _targetTimeStart <= storedPredictions[i].targetTime
+                && storedPredictions[i].targetTime <= _targetTimeEnd
+                && _creationTimeStart <= storedPredictions[i].creationTime
+                && storedPredictions[i].creationTime <= _creationTimeEnd
+            );
+            if (windowFlag) {
                 if (firstIdxInWindow > storedPredictions.length) {firstIdxInWindow = i;}
+                lastIdxInWindow = i;
+                numInWindow++;
             }
         }
 
@@ -234,7 +240,13 @@ contract PredictionRecorder {
         Prediction[] memory inWindowPredictions = new Prediction[](numInWindow);
         numInWindow = 0;
         for (uint i = firstIdxInWindow; i < lastIdxInWindow + 1; i++) {
-            if (_targetTimeStart <= storedPredictions[i].targetTime && storedPredictions[i].targetTime <= _targetTimeEnd) {
+            bool windowFlag = (
+                _targetTimeStart <= storedPredictions[i].targetTime
+                && storedPredictions[i].targetTime <= _targetTimeEnd
+                && _creationTimeStart <= storedPredictions[i].creationTime
+                && storedPredictions[i].creationTime <= _creationTimeEnd
+            );
+            if (windowFlag) {
                 inWindowPredictions[numInWindow] = storedPredictions[i];
                 numInWindow++;
             }
@@ -297,19 +309,36 @@ contract PredictionRecorder {
             intermediateStats[0] / numDecryptionBatches[_predictionAddress]
         );
     }
-
-
-
 }
 
 contract InvitationalBet {
-
+    /**
+     * A showcase contract that is a valid application of PredictionRecorder.
+     *
+     * Invited participants can bet on the oracle value at a specific target time.
+     * Before that target time, participants can make new predictions or add their own bet value.
+     * For each participant, only the last prediction for the target time will count.
+     * To prevent cheating on decryptions, predictions shall contain watermarks that meet a minimum length requirement.
+     *
+     * Total value of reward pool = sum of values added by all participants
+     *
+     * After the target time, no predictions can be made. Participants shall decrypt their predictions.
+     * They can also pre-check their payoff factor, which is a function of predicted value & true value.
+     * If they did not predict or did not meet watermark requirement, the factor is set to 1.
+     *
+     * At a later time, payoffs to participants will open and anyone can trigger them.
+     * It is assumed that all participants have decrypted their predictions.
+     * The reward pool will be distributed proportionally to the payoff coeffients:
+     *
+     * Payoff coefficient = payoff factor * bet value of participant
+     */
     PredictionRecorder private recorder;
     AggregatorV3Interface private dataFeed;
     address private recorderAddress;
     address[] private participants;
 
     uint private targetTime;
+    uint private creationCloseTime;
     uint private payOpenTime;
     uint private minWatermarkLength;
     uint private roundTime;
@@ -324,16 +353,18 @@ contract InvitationalBet {
         address _recorderAddress,
         address[] memory _participants,
         uint _targetTime,
+        uint _creationCloseTime,
         uint _payOpenTime,
         uint _minWatermarkLength
     ) {
         require(block.timestamp < targetTime, "Cannot target the past.");
-        require(payOpenTime >= targetTime + 72 * 3600, "Give at least 72 hours for post-window decryption.");
+        //require(payOpenTime >= targetTime + 72 * 3600, "Give at least 72 hours for post-window decryption.");
 
         recorder = PredictionRecorder(_recorderAddress);
         dataFeed = AggregatorV3Interface(recorder.viewOracle());
         recorderAddress = _recorderAddress;
         targetTime = _targetTime;
+        creationCloseTime = _creationCloseTime;
         payOpenTime = _payOpenTime;
         minWatermarkLength = _minWatermarkLength;
 
@@ -356,6 +387,16 @@ contract InvitationalBet {
 
     modifier beforeTargetTime() {
         require(block.timestamp <= targetTime, "Target time has passed.");
+        _;
+    }
+
+    modifier afterTargetTime() {
+        require(targetTime < block.timestamp, "Target time has not passed.");
+        _;
+    }
+
+    modifier beforeCreationClose() {
+        require(block.timestamp <= creationCloseTime, "Creation time has passed.");
         _;
     }
 
@@ -390,12 +431,16 @@ contract InvitationalBet {
         );
     }
 
-    function addValue() external payable onlyInvited beforeTargetTime {
+    /**
+     * Add value to one's bet.
+     */
+    function addValue() external payable onlyInvited beforeCreationClose {
         betValues[msg.sender] += msg.value;
     }
 
     /**
      * Register a round for oracle lookup that should be the latest one before the target time.
+     * If it is not the latest, anyone else can overwrite it.
      */
     function registerRound(uint80 _roundId) public beforePayOpen returns (bool) {
         (
@@ -415,10 +460,10 @@ contract InvitationalBet {
     }
 
     /**
-     * An example of calculating payoff coefficients.
-     * Staircase exponential decay, bounded below by 1.
+     * An example of calculating payoff factors: staircase exponential decay, bounded below by 1.
+     * This is unaware of parsing predictions or accounting for invalid prediction values.
      */
-    function payCoefficientFormula(int _predValue, int _trueValue) public pure returns (uint) {
+    function payFactorFormula(int _predValue, int _trueValue) public pure returns (uint) {
         uint diff = uint(_predValue >= _trueValue ? _predValue - _trueValue : _trueValue - _predValue);
         uint coeff = 2 ** 20;
         for (uint i = 0; i < (diff / 10); i++) {
@@ -427,52 +472,69 @@ contract InvitationalBet {
         return coeff + 1;
     }
 
-    function computePayCoefficients() public view afterPayOpen returns (uint[] memory) {
+    /**
+     * The full pay factor logic, parsing predictions and accounting for invalid prediction values.
+     * If there are no predictions or the last prediction does not satisfy watermark requirement,
+     * the factor will be 1.
+     */
+    function computePayFactor(address _participant) private view afterTargetTime returns (uint) {
+        require(isInvited[_participant] == 1, "Not a participant");
+        /* no prediction made: factor = 1 */
+        Prediction[] memory predictions = recorder.viewPredictionByWindow(
+            _participant,
+            targetTime,
+            targetTime,
+            0,
+            creationCloseTime
+        );
+        if (predictions.length < 1) {return 1;}
+
+        /* Extract the last predicted value for the target time*/
+        Prediction memory lastPrediction = predictions[predictions.length-1];
+        uint[] memory addressDigits = uintToDigits(addressToUint(_participant));
+        int sign = lastPrediction.predictedValue >= 0 ? int(1) : int(-1);
+        (
+            bool watermarkFlag,
+            uint watermarkLength,
+            /* uint watermarkValue */,
+            uint unwatermarkedValue
+        ) = recorder.extractWatermark(uint(sign * lastPrediction.predictedValue), addressDigits);
+
+        /* watermark is unsatisfactory: factor = 1 */
+        if (!watermarkFlag || watermarkLength < minWatermarkLength) {return 1;}
+
+        /* normal scenario: factor is based on the predicted value */
+        int predValue = sign * int(unwatermarkedValue);
+        return payFactorFormula(predValue, trueValue);
+    }
+
+    /**
+     * Each participant can check their own pay factor before pay opens.
+     */
+    function computeMyPayFactor() public view onlyInvited returns (uint) {
+        return computePayFactor(msg.sender);
+    }
+
+    /**
+     * Calculate payoff coefficients for every participant.
+     * Payoffs will be delivered proportionally to these coefficients.
+     */
+    function computeAllPayCoefficients() public view afterPayOpen returns (uint[] memory) {
         uint[] memory payCoefficients = new uint[](participants.length);
 
         /* Calculate payoff coefficients proportional to bet value */
         for (uint i = 0; i < participants.length; i++) {
-            /* no prediction made: factor = 1 */
-            Prediction[] memory predictions = recorder.viewPredictionByWindow(
-                participants[i],
-                targetTime,
-                targetTime
-            );
-            if (predictions.length < 1) {
-                payCoefficients[i] = betValues[participants[i]];
-                continue;
-            }
-
-            /* Extract the last predicted value for the target time*/
-            Prediction memory lastPrediction = predictions[predictions.length-1];
-            uint[] memory addressDigits = uintToDigits(addressToUint(participants[i]));
-            int sign = lastPrediction.predictedValue >= 0 ? int(1) : int(-1);
-            (
-                bool watermarkFlag,
-                uint watermarkLength,
-                /* uint watermarkValue */,
-                uint unwatermarkedValue
-            ) = recorder.extractWatermark(
-                uint(sign * lastPrediction.predictedValue),
-                addressDigits
-            );
-
-            /* watermark is unsatisfactory: factor = 1 */
-            if (!watermarkFlag || watermarkLength < minWatermarkLength) {
-                payCoefficients[i] = betValues[participants[i]];
-                continue;
-            }
-
-            /* normal scenario: factor is based on the predicted value */
-            int predValue = sign * int(unwatermarkedValue);
-            uint factor = payCoefficientFormula(predValue, trueValue);
+            uint factor = computePayFactor(participants[i]);
             payCoefficients[i] = factor * betValues[participants[i]];
         }
         return payCoefficients;
     }
 
+    /**
+     * Trigger payoffs. This completes the bet.
+     */
     function triggerPay() external payable afterPayOpen beforeComplete {
-        uint[] memory payCoefficients = computePayCoefficients();
+        uint[] memory payCoefficients = computeAllPayCoefficients();
         uint totalCoefficient = 0;
 
         for (uint i = 0; i < participants.length; i++) {
