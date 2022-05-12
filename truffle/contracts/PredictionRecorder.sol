@@ -193,6 +193,13 @@ contract PredictionRecorder {
     }
 
     /**
+     * View all the predictions made by an address.
+     */
+    function viewDecryption(address _predictionAddress) public view returns (Decryption[] memory) {
+        return decryptions[_predictionAddress];
+    }
+
+    /**
      * Compare a watermarked value with an address, then parse it.
      * Return a success flag, a length measure, the watermark value, and the actual predicted value.
      */
