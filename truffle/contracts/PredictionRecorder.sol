@@ -16,6 +16,7 @@ struct Prediction {
 
 struct Decryption {
     uint recordsInBatch;
+    uint e;
     uint d;
     uint n;
 }
@@ -133,10 +134,12 @@ contract PredictionRecorder {
 
     /**
      * Decrypt predictions so that they become publically readable, i.e. m = (c ** d) % n.
+     * Also requires the encryption key e for validating the key to prevent cheating on decryption.
      * This exposes the existing encryption, so the sender must replace their off-chain RSA keys.
      * The option upToCreationTime allows changing keys without having to decrypt previous predictions immediately.
      */
     function decryptPrediction(
+        uint _e,
         uint _d,
         uint _n,
         uint _upToCreationTime
@@ -146,7 +149,7 @@ contract PredictionRecorder {
         uint decryptionEnd = decryptionStart;
 
         /* Pre-compute a near upper bound of log_2(d) for fixed array size */
-        uint log2dUpper = logarithmFloor(_d, 2) + 1;
+        uint log2Upper = logarithmFloor(_e > _d ? _e : _d, 2) + 1;
 
         /* Predictions are naturally sorted by their creation time in ascending order */
         
@@ -157,7 +160,9 @@ contract PredictionRecorder {
             /* Decryption: m = (c ** d) % n with log(d) running time and log(d) memory */
             int sign = predictions[sender][i].predictedValue >= 0 ? int(1) : int(-1);
             uint c = uint(sign * predictions[sender][i].predictedValue);
-            uint m = powerWithModulos(c, _d, log2dUpper, _n);
+            uint m = powerWithModulos(c, _d, log2Upper, _n);
+            /* If encryption and decryption keys don't match RSA pattern, stop */
+            if (c != powerWithModulos(m, _e, log2Upper, _n)) {break;}
 
             /* Finalize struct attribute change */
             predictions[sender][i].predictedValue = sign * int(m);
@@ -168,6 +173,7 @@ contract PredictionRecorder {
         for (uint i = decryptionStart; i < decryptionEnd; i++) {
             decryptions[sender].push(Decryption({
                 recordsInBatch: decryptionEnd - decryptionStart,
+                e: _e,
                 d: _d,
                 n: _n
             }));
