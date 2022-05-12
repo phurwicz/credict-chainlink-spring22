@@ -14,6 +14,12 @@ struct Prediction {
     string predictionComment;
 }
 
+struct Decryption {
+    uint recordsInBatch;
+    uint d;
+    uint n;
+}
+
 contract PredictionRecorder {
     /**
      * Forecast the value of any address-identifiable oracle to show your expertise.
@@ -70,7 +76,7 @@ contract PredictionRecorder {
     address private oracleAddress;
     AggregatorV3Interface private dataFeed;
     mapping (address => Prediction[]) private predictions;
-    mapping (address => uint) private decryptIndices;
+    mapping (address => Decryption[]) private decryptions;
     mapping (address => uint) private numDecryptionBatches;
 
     constructor(address _oracleAddress) {
@@ -131,36 +137,46 @@ contract PredictionRecorder {
      * The option upToCreationTime allows changing keys without having to decrypt previous predictions immediately.
      */
     function decryptPrediction(
-        uint d,
-        uint n,
-        uint upToCreationTime
+        uint _d,
+        uint _n,
+        uint _upToCreationTime
     ) external returns (uint) {
         address sender = msg.sender;
-        uint prevDecryptIndex = decryptIndices[sender];
+        uint decryptionStart = decryptions[sender].length;
+        uint decryptionEnd = decryptionStart;
 
         /* Pre-compute a near upper bound of log_2(d) for fixed array size */
-        uint log2dUpper = logarithmFloor(d, 2) + 1;
+        uint log2dUpper = logarithmFloor(_d, 2) + 1;
 
         /* Predictions are naturally sorted by their creation time in ascending order */
-        for (uint i = decryptIndices[sender]; i < predictions[sender].length; i++) {
+        
+        for (uint i = decryptionStart; i < predictions[sender].length; i++) {
             /* If beyond set creation time limit, stop */
-            if (predictions[sender][i].creationTime > upToCreationTime) {break;}
+            if (predictions[sender][i].creationTime > _upToCreationTime) {break;}
 
             /* Decryption: m = (c ** d) % n with log(d) running time and log(d) memory */
             int sign = predictions[sender][i].predictedValue >= 0 ? int(1) : int(-1);
             uint c = uint(sign * predictions[sender][i].predictedValue);
-            uint m = powerWithModulos(c, d, log2dUpper, n);
+            uint m = powerWithModulos(c, _d, log2dUpper, _n);
 
             /* Finalize struct attribute change */
             predictions[sender][i].predictedValue = sign * int(m);
             predictions[sender][i].isDecrypted = true;
-            decryptIndices[sender]++;
+            decryptionEnd++;
+        }
+
+        for (uint i = decryptionStart; i < decryptionEnd; i++) {
+            decryptions[sender].push(Decryption({
+                recordsInBatch: decryptionEnd - decryptionStart,
+                d: _d,
+                n: _n
+            }));
         }
 
         /* If anything got decrypted, increment the batch count */
-        if (prevDecryptIndex < decryptIndices[sender]) {numDecryptionBatches[sender]++;}
+        if (decryptionStart < decryptionEnd) {numDecryptionBatches[sender]++;}
 
-        return decryptIndices[sender];
+        return decryptionEnd - decryptionStart;
     }
 
     /**
@@ -719,5 +735,3 @@ function countDistinctSortedUints(uint[] memory arr, uint maxIdx) pure returns (
     }
     return numDistincts;
 }
-
-
