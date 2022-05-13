@@ -76,10 +76,13 @@ contract PredictionRecorder {
 
     address private oracleAddress;
     AggregatorV3Interface private dataFeed;
+    /* For iterating over all the predictors */
+    address[] private predictorAddresses;
     mapping (address => Prediction[]) private predictions;
     mapping (address => Decryption[]) private decryptions;
     mapping (address => uint) private numDecryptionBatches;
-    mapping (address => mapping (uint => mapping (uint => uint))) predictionCreationTargetIndex;
+    mapping (address => mapping (uint => uint[])) private predictionTargetIndex;
+    mapping (address => mapping (uint => mapping (uint => uint))) private predictionCreationTargetIndex;
 
     constructor(address _oracleAddress) {
         oracleAddress = _oracleAddress;
@@ -120,7 +123,11 @@ contract PredictionRecorder {
         string memory _predictionComment
     ) external {
         require(block.timestamp < _targetTime, "Cannot predict the past.");
+        
+        /* Note the index of this to-be-stoed prediction for future lookup */
         uint index = predictions[msg.sender].length;
+        /* If sender has never predicted before, store its address */
+        if (index == 0) {predictorAddresses.push(msg.sender);}
 
         predictions[msg.sender].push(Prediction({
             targetOracle: oracleAddress,
@@ -133,6 +140,8 @@ contract PredictionRecorder {
             predictionComment: _predictionComment
         }));
 
+        /* Store index in lookup maps */
+        predictionTargetIndex[msg.sender][_targetTime].push(index);
         predictionCreationTargetIndex[msg.sender][block.timestamp][_targetTime] = index;
     }
 
