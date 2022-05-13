@@ -79,6 +79,7 @@ contract PredictionRecorder {
     mapping (address => Prediction[]) private predictions;
     mapping (address => Decryption[]) private decryptions;
     mapping (address => uint) private numDecryptionBatches;
+    mapping (address => mapping (uint => mapping (uint => uint))) predictionCreationTargetIndex;
 
     constructor(address _oracleAddress) {
         oracleAddress = _oracleAddress;
@@ -119,6 +120,7 @@ contract PredictionRecorder {
         string memory _predictionComment
     ) external {
         require(block.timestamp < _targetTime, "Cannot predict the past.");
+        uint index = predictions[msg.sender].length;
 
         predictions[msg.sender].push(Prediction({
             targetOracle: oracleAddress,
@@ -130,6 +132,8 @@ contract PredictionRecorder {
             predictionAuthor: _predictionAuthor,
             predictionComment: _predictionComment
         }));
+
+        predictionCreationTargetIndex[msg.sender][block.timestamp][_targetTime] = index;
     }
 
     /**
