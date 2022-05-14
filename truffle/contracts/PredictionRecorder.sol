@@ -81,8 +81,8 @@ contract PredictionRecorder {
     mapping (address => Prediction[]) private predictions;
     mapping (address => Decryption[]) private decryptions;
     mapping (address => uint) private numDecryptionBatches;
-    mapping (address => mapping (uint => uint[])) private predictionTargetIndex;
-    mapping (address => mapping (uint => mapping (uint => uint))) private predictionCreationTargetIndex;
+    mapping (address => mapping (uint => uint[])) private predictionIndexLookupByTargetTime;
+    mapping (address => mapping (uint => mapping (uint => uint))) private predictionIndexLookupByTargetTimeCreationTime;
 
     constructor(address _oracleAddress) {
         oracleAddress = _oracleAddress;
@@ -141,8 +141,8 @@ contract PredictionRecorder {
         }));
 
         /* Store index in lookup maps */
-        predictionTargetIndex[msg.sender][_targetTime].push(index);
-        predictionCreationTargetIndex[msg.sender][block.timestamp][_targetTime] = index;
+        predictionIndexLookupByTargetTime[msg.sender][_targetTime].push(index);
+        predictionIndexLookupByTargetTimeCreationTime[msg.sender][block.timestamp][_targetTime] = index;
     }
 
     /**
@@ -199,6 +199,13 @@ contract PredictionRecorder {
     }
 
     /**
+     * View all the addresses that have made a prediction.
+     */
+    function viewPredictors() public view returns (address[] memory) {
+        return predictorAddresses;
+    }
+
+    /**
      * View all the predictions made by an address.
      */
     function viewPrediction(address _predictionAddress) public view returns (Prediction[] memory) {
@@ -206,12 +213,33 @@ contract PredictionRecorder {
     }
 
     /**
-     * View all the predictions made by an address.
+     * View all the decryptions made by an address. The indices match those of the predictions.
      */
     function viewDecryption(address _predictionAddress) public view returns (Decryption[] memory) {
         return decryptions[_predictionAddress];
     }
 
+    /**
+     * Lookup all the predictions made by an address targeting a specific time.
+     */
+    function lookupPredictionIndexByTargetTime(
+        address _predictionAddress,
+        uint _targetTime
+    ) public view returns (uint[] memory) {
+        return predictionIndexLookupByTargetTime[_predictionAddress][_targetTime];
+    }
+    
+    /**
+     * Lookup a single prediction created by an address at a specific time atargeting another specific time.
+     */
+    function lookupPredictionIndexByCreationTimeTargetTime(
+        address _predictionAddress,
+        uint _creationTime,
+        uint _targetTime
+    ) public view returns (uint) {
+        return predictionIndexLookupByTargetTime[_predictionAddress][_creationTime][_targetTime];
+    }
+    
     /**
      * Compare a watermarked value with an address, then parse it.
      * Return a success flag, a length measure, the watermark value, and the actual predicted value.
