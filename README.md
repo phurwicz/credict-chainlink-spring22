@@ -4,9 +4,25 @@ Credibly predict oracles. [Project for Chainlink Hackathon Spring 2022](https://
 
 ## Getting started
 
--   [TODO] PredictionRecorder.sol: contract file
--   [TODO] PredictionRecorder: centerpiece 
--   [TODO] InvitationalBet: downstream application
+This work is mostly a single Solidity file: [PredictionRecorder.sol](truffle/contracts/PredictionRecorder.sol). You can deploy two contracts and verify their source codes. Then you can interact with the deployed contracts using any Web3 provider.
+
+```
+truffle deploy --network <your-selected-network>
+truffle run verify PredictionRecorder --network <your-selected-network>
+truffle run verify InvitationalBet --network <your-selected-network>
+```
+
+### PredictionRecorder: centerpiece
+
+Guide on interacting with this contract on Etherscan
+
+-   [Youtube video](https://youtu.be/hzypdx23U4k)
+
+### InvitationalBet: downstream application
+
+Guide on interacting with this contract on Etherscan
+
+-   [Youtube video](https://youtu.be/hzypdx23U4k?t=197)
 
 ## Example deployed contracts
 
