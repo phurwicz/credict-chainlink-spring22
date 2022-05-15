@@ -16,11 +16,11 @@ Credibly predict oracles. [Project for Chainlink Hackathon Spring 2022](https://
 
 ## Getting started
 
-This work is mostly a single Solidity file: [PredictionRecorder.sol](truffle/contracts/PredictionRecorder.sol). You can deploy two contracts and verify their source codes. Then you can interact with the deployed contracts using any Web3 provider.
+This work is mostly a single Solidity file: [`PredictionRecorder.sol`](truffle/contracts/PredictionRecorder.sol). You can deploy two contracts and verify their source codes. Then you can interact with the deployed contracts using any Web3 provider.
 
 ### Dependencies
 
-`[hdwallet-provider](https://www.npmjs.com/package/@truffle/hdwallet-provider)` is for authentication and `[truffle-plugin-verify](https://github.com/rkalis/truffle-plugin-verify)` is for verifying source codes that contain imports.
+[`hdwallet-provider`](https://www.npmjs.com/package/@truffle/hdwallet-provider) is for authentication and [`truffle-plugin-verify`](https://github.com/rkalis/truffle-plugin-verify) is for verifying source codes that contain imports.
 
 ```
 npm install @truffle/hdwallet-provider
@@ -29,14 +29,14 @@ npm install -D truffle-plugin-verify
 
 ### Environment variables
 
-In the [truffle folder](truffle/) you need two files to **locally** configure authentication credentials.
+In the [`truffle` folder](truffle/) you need two files to **locally** configure authentication credentials.
 
 -   create a `.env` file to hold `INFURA_PROJECT_ID` and `ETHERSCAN_API_KEY`.
 -   create a `.secret` fild to hold mnenomics (space-separated words, typically 12 of them) that generate your HDWallet.
 
 ### Deployment and verification
 
-To deploy `PredictionRecorder` or `InvitationalBet`, modify the comments in `[migrations.js](truffle/migrations/2_deploy_contracts.js)`. Then
+To deploy `PredictionRecorder` or `InvitationalBet`, modify the comments in [`migrations.js`](truffle/migrations/2_deploy_contracts.js). Then
 ```
 truffle deploy --network rinkeby
 truffle run verify <the-contract-you-deployed> --network rinkeby
