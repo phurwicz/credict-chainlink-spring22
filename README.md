@@ -2,20 +2,16 @@
 
 Credibly predict oracles. [Project for Chainlink Hackathon Spring 2022](https://devpost.com/software/credible-prediction-record)
 
-## Introduction: what the contracts do
+## Introduction
 
-### PredictionRecorder: centerpiece
+### PredictionRecorder: stores prediction data in a trust-worthy way
 
-Guide on interacting with this contract on Etherscan
-
--   [Youtube video](https://youtu.be/hzypdx23U4k)
+-   [Video guide](https://youtu.be/hzypdx23U4k)
 -   [Example PredictionRecorder for ETH/USD on Rinkeby](https://rinkeby.etherscan.io/address/0xe92232688a4ee9b0a0a0d2ce596e8bed152097d7)
 
-### InvitationalBet: downstream application
+### InvitationalBet: a showcase application that reads prediction data and oracle rounds to bet
 
-Guide on interacting with this contract on Etherscan
-
--   [Youtube video](https://youtu.be/hzypdx23U4k?t=197)
+-   [Video guide](https://youtu.be/hzypdx23U4k?t=197)
 -   [Example InvitationalBet for the above PredictionRecorder](https://rinkeby.etherscan.io/address/0x15315533971A70945857daf7BE53727CcC057C9D)
 
 ## Getting started
