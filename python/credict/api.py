@@ -49,8 +49,15 @@ class PredictionHandler:
         handler.records_to_decrypt = data_dict["records_to_decrypt"]
         return handler
         
+    @staticmethod
+    def json_path_static(sender_address, contract_address):
+        return f"{sender_address}_{contract_address}.json"
+        
     def json_path_auto(self):
-        return f"{self.sender_address}_{self.contract_dict['address']}.json"
+        return PredictionHandler.json_path_static(
+            self.sender_address,
+            self.contract_dict['address'],
+        )
         
     def to_json_auto(self):
         self.to_json(self.json_path_auto())
