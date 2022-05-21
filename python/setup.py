@@ -13,7 +13,7 @@ def get_description():
 
 setuptools.setup(
     name="credict",
-    version="0.1.1",
+    version="0.1.2",
     description="Python interface for Credict smart contracts on Ethereum.",
     long_description=get_description(),
     long_description_content_type="text/markdown",
