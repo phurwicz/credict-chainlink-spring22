@@ -44,6 +44,4 @@ truffle run verify <the-contract-you-deployed> --network rinkeby
 
 ### Optional Python API
 
-TODO: add a sample code notebook
-
-## Adverserial risks deep dive
+Secure original predictions need encryption, decryption, and watermarks, which we suggest managing programmatically. For instance, you can consider taking a look at the [`python` folder](python/) to use `credict-py`. It takes care of RSA encryption and watermarks.
