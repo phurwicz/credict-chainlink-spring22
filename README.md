@@ -37,10 +37,15 @@ In the [`truffle` folder](truffle/) you need two files to **locally** configure 
 -   create a `.env` file to hold `INFURA_PROJECT_ID` and `ETHERSCAN_API_KEY`.
 -   create a `.secret` fild to hold mnenomics (space-separated words, typically 12 of them) that generate your HDWallet.
 
-To deploy `PredictionRecorder` or `InvitationalBet`, modify the comments in [`migrations.js`](truffle/migrations/2_deploy_contracts.js). Then
+To deploy `PredictionRecorder` or `InvitationalBet`, modify the comments in [`migrations.js`](truffle/migrations/2_deploy_contracts.js).
+
+-   for `PredictionRecorder`, you need to set the target oracle address. Note that this can vary between different networks.
+-   for `InvitationalBet`, you need to set the `PredictionRecorder` address, invited participants, and timeframe / watermark parameters.
+
+When your deployment parameters are ready, do
 ```
 truffle deploy --network rinkeby
-truffle run verify <the-contract-you-deployed> --network rinkeby
+truffle run verify <either-PredictionRecorder-or-InvitationalBet> --network rinkeby
 ```
 
 ### Optional Python API
