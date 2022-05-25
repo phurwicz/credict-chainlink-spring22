@@ -199,47 +199,12 @@ contract PredictionRecorder {
     }
 
     /**
-     * View all the addresses that have made a prediction.
-     */
-    function viewPredictors() public view returns (address[] memory) {
-        return predictorAddresses;
-    }
-
-    /**
      * View all the predictions made by an address.
      */
     function viewPrediction(address _predictionAddress) public view returns (Prediction[] memory) {
         return predictions[_predictionAddress];
     }
 
-    /**
-     * View all the decryptions made by an address. The indices match those of the predictions.
-     */
-    function viewDecryption(address _predictionAddress) public view returns (Decryption[] memory) {
-        return decryptions[_predictionAddress];
-    }
-
-    /**
-     * Lookup all the predictions made by an address targeting a specific time.
-     */
-    function lookupPredictionIndexByTargetTime(
-        address _predictionAddress,
-        uint _targetTime
-    ) public view returns (uint[] memory) {
-        return predictionIndexLookupByTargetTime[_predictionAddress][_targetTime];
-    }
-    
-    /**
-     * Lookup a single prediction created by an address at a specific time atargeting another specific time.
-     */
-    function lookupPredictionIndexByCreationTimeTargetTime(
-        address _predictionAddress,
-        uint _creationTime,
-        uint _targetTime
-    ) public view returns (uint) {
-        return predictionIndexLookupByTargetTime[_predictionAddress][_creationTime][_targetTime];
-    }
-    
     /**
      * Compare a watermarked value with an address, then parse it.
      * Return a success flag, a length measure, the watermark value, and the actual predicted value.
@@ -395,6 +360,43 @@ contract PredictionRecorder {
             intermediateStats[0] / numDecryptionBatches[_predictionAddress]
         );
     }
+    
+    // Tentative upgrades for easier query
+    // /**
+    //  * View all the addresses that have made a prediction.
+    //  */
+    // function viewPredictors() public view returns (address[] memory) {
+    //     return predictorAddresses;
+    // }
+
+    // /**
+    //  * View all the decryptions made by an address. The indices match those of the predictions.
+    //  */
+    // function viewDecryption(address _predictionAddress) public view returns (Decryption[] memory) {
+    //     return decryptions[_predictionAddress];
+    // }
+
+    // /**
+    //  * Lookup all the predictions made by an address targeting a specific time.
+    //  */
+    // function lookupPredictionIndexByTargetTime(
+    //     address _predictionAddress,
+    //     uint _targetTime
+    // ) public view returns (uint[] memory) {
+    //     return predictionIndexLookupByTargetTime[_predictionAddress][_targetTime];
+    // }
+    
+    // /**
+    //  * Lookup a single prediction created by an address at a specific time atargeting another specific time.
+    //  */
+    // function lookupPredictionIndexByCreationTimeTargetTime(
+    //     address _predictionAddress,
+    //     uint _creationTime,
+    //     uint _targetTime
+    // ) public view returns (uint) {
+    //     return predictionIndexLookupByTargetTime[_predictionAddress][_creationTime][_targetTime];
+    // }
+    
 }
 
 contract InvitationalBet {
